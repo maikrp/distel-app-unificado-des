@@ -1,0 +1,20 @@
+{
+  "name": "distel-app-unificado",
+  "version": "1.0.0",
+  "description": "Monorepo para Desabasto, Visitas y Ventas.\r Estructura inicial; luego se migran m�dulos.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maikrp/distel-app-unificado.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/maikrp/distel-app-unificado/issues"
+  },
+  "homepage": "https://github.com/maikrp/distel-app-unificado#readme"
+}
