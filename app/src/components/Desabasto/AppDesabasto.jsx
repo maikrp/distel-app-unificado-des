@@ -323,7 +323,7 @@ export default function AppDesabasto() {
             {loading ? "Verificando..." : "Ingresar"}
           </button>
           <p className="text-xs text-gray-400 mt-6">
-            © 2025 Distel — Sistema Manejo de Clientes Ver.1.3.7
+            © 2025 EBSGN — Sistema Manejo Clientes Ver.2.0
           </p>
         </div>
       </div>
@@ -405,7 +405,7 @@ export default function AppDesabasto() {
       </div>
 
       <footer className="text-center p-2 text-sm text-gray-600 border-t">
-        © 2025 Distel — Sistema Manejo de Desabasto Ver.1.3.7
+        © 2025 EBSGN — Sistema Manejo Clientes Ver.2.0
       </footer>
     </div>
   );
@@ -415,56 +415,88 @@ export default function AppDesabasto() {
   );
 
   const menuPrincipalScreen = (
-    <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-10 sm:pt-12 md:pt-16">
-      <div className="bg-white shadow-lg rounded-3xl p-6 text-center border border-gray-200 w-[360px] max-w-[90%] max-h-[90vh] overflow-auto">
-        <div className="flex items-center justify-center space-x-6 mb-6">
-          <img src="/liberty.png" alt="Logo Liberty" className="w-24 h-24 object-contain" />
-          <img src="/logo_distel.png" alt="Logo Distel" className="w-24 h-24 object-contain" />
+  <div className="flex flex-col min-h-screen bg-[#e5edf3]">
+
+    {/* HEADER MOBILE SUITCASE STYLE */}
+    <div className="bg-red-700 text-white flex items-center justify-between px-4 py-3 shadow-md">
+      <button className="text-white text-2xl font-bold">☰</button>
+      <div className="text-center">
+        <div className="flex items-center justify-center space-x-2">
+          <img src="/liberty.png" className="h-10 w-10 object-contain" alt="Liberty" />
+          <img src="/logo_distel.png" className="h-10 w-10 object-contain" alt="Distel" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Menú Principal</h1>
-        <h2 className="text-xl font-semibold text-gray-800 leading-tight text-center mb-6">
-          Bienvenido
-          <br />
-          <span className="block text-lg font-normal text-gray-700 mt-1">
-            {usuario?.nombre}
-          </span>
-        </h2>
-
-        <div className="space-y-3">
-          <button
-            onClick={() => setVista("desabasto")}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold"
-          >
-            Manejo Desabasto
-          </button>
-
-          <button
-            onClick={() => setVista("visitas")}
-            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold"
-          >
-            Actualización de Datos del PDV
-          </button>
-
-          {usuario?.acceso === "superadmin" && (
-            <button
-              onClick={() => setVista("adminTools")}
-              className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 rounded-lg font-semibold"
-            >
-              🧰 Panel de Administración
-            </button>
-          )}
-
-          <button
-            onClick={handleLogout}
-            className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-semibold"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 mt-6">© 2025 Distel — Menú Principal</p>
+        <p className="text-[10px]">Versión 1.3.7</p>
       </div>
+      <button className="text-white text-2xl">🔔</button>
     </div>
-  );
+
+    {/* GRID PRINCIPAL */}
+    <div className="grid grid-cols-2 gap-4 p-4 flex-1 overflow-auto">
+
+      {/* ACTIVIDADES (DESABASTO) */}
+      <button 
+        onClick={() => setVista("desabasto")}
+        className="bg-white border rounded-2xl shadow-md p-6 flex flex-col items-center justify-center space-y-3"
+      >
+        <img src="/icons/actividades.svg" className="h-12 w-12 opacity-80" />
+        <span className="text-red-600 font-semibold text-lg">Actividades</span>
+      </button>
+
+      {/* CUENTAS (INACTIVO) */}
+      <button 
+        disabled
+        className="bg-gray-300 border rounded-2xl shadow-md p-6 flex flex-col items-center justify-center space-y-3 opacity-40"
+      >
+        <img src="/icons/cuentas.svg" className="h-12 w-12" />
+        <span className="text-red-600 font-semibold text-lg">Cuentas</span>
+      </button>
+
+      {/* FORMULARIOS (VISITAS) */}
+      <button 
+        onClick={() => setVista("visitas")}
+        className="bg-white border rounded-2xl shadow-md p-6 flex flex-col items-center justify-center space-y-3"
+      >
+        <img src="/icons/formularios.svg" className="h-12 w-12 opacity-80" />
+        <span className="text-red-600 font-semibold text-lg">Formularios</span>
+      </button>
+
+      {/* CHECKIN (PENDIENTE) */}
+      <button
+        onClick={() => setVista("asistencia")}
+        className="bg-white border rounded-2xl shadow-md p-6 flex flex-col items-center justify-center space-y-3"
+      >
+        <img src="/icons/checkin.svg" className="h-12 w-12 opacity-80" />
+        <span className="text-red-600 font-semibold text-lg">CheckIn</span>
+      </button>
+
+      {/* GPS (NUEVA TARJETA, SIN ACCIÓN) */}
+      <button
+        className="bg-white border rounded-2xl shadow-md p-6 flex flex-col items-center justify-center space-y-3"
+      >
+        <img src="/icons/gps.svg" className="h-12 w-12 opacity-80" />
+        <span className="text-red-600 font-semibold text-lg">GPS</span>
+      </button>
+
+    </div>
+
+    {/* FOOTER NAVIGATION */}
+    <div className="bg-[#181c26] text-gray-200 flex justify-around text-xs py-2 border-t">
+      <button className="flex flex-col items-center">
+        🔄 <span>Sincronizar</span>
+      </button>
+      <button className="flex flex-col items-center">
+        📍 <span>Rutas</span>
+      </button>
+      <button className="flex flex-col items-center">
+        💬 <span>Chats</span>
+      </button>
+      <button className="flex flex-col items-center">
+        📷 <span>Geofotos</span>
+      </button>
+    </div>
+
+  </div>
+);
 
   // -------------------------------------------------------------------------
   // RENDER PRINCIPAL

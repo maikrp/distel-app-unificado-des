@@ -1,99 +1,85 @@
-/* eslint-disable no-unused-vars */
-/* =============================================================================
-   SupervisorMenu.jsx — versión limpiada (2025-11-13, Parte 1/3)
-   — NO SE ELIMINARON FUNCIONES FUNCIONALES.
-   — Reordenado para claridad: imports → estado → helpers → cargas.
-   ============================================================================ */
+/* =====================================================================
+   SUPERVISOR MENU – VERSIÓN 3.0.1 DESARROLLO
+   FUNCIONAL Y LISTA PARA PRODUCCIÓN
+===================================================================== */
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../supabaseClient";
 
 export default function SupervisorMenu({ usuario }) {
-  /* ---------------------------------------------------------------------------
-     ESTADO GENERAL DE LA VISTA
-     --------------------------------------------------------------------------- */
+
+  // ============================
+  // ESTADOS
+  // ============================
   const [vista, setVista] = useState("menu");
   const [agentes, setAgentes] = useState([]);
-  const [detalles, setDetalles] = useState(null);
+  const [detalles, setDetalles] = useState(null); // Estado para manejar la vista de detalles
   const [loading, setLoading] = useState(true);
   const [resumenZona, setResumenZona] = useState({});
   const [historico, setHistorico] = useState([]);
   const [fechaRango, setFechaRango] = useState({ inicio: null, fin: null });
 
-  /* ---------------------------------------------------------------------------
-     HELPERS — ZONA HORARIA / FECHAS
-     --------------------------------------------------------------------------- */
+  // ============================
+  // FECHAS – COSTA RICA
+  // ============================
   const TZ = "America/Costa_Rica";
 
-  const hoyISO = () =>
-    new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-
-  const isoNDiasAtras = (n) => {
-    const base = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-    const [y, m, d] = base.split("-").map(Number);
-    const d0 = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-    d0.setUTCDate(d0.getUTCDate() - n);
-
-    const y2 = d0.getUTCFullYear();
-    const m2 = String(d0.getUTCMonth() + 1).padStart(2, "0");
-    const d2 = String(d0.getUTCDate()).padStart(2, "0");
-    return `${y2}-${m2}-${d2}`;
+  const hoyISO = () => {
+    const cr = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+    return cr.toISOString().split("T")[0];
   };
 
-  const parseISOasCRDate = (iso) => {
-    const [y, m, d] = (iso || "").split("-").map(Number);
-    if (!y || !m || !d) return new Date();
-    return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  // Ajuste: Día anterior = SÁBADO si es domingo o lunes
+  const isoNDiasAtras = (n) => {
+    const nowCR = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+    const dia = nowCR.getDay(); // 0=dom, 1=lun, 6=sab
+
+    if (n === 1) {
+      if (dia === 0) {
+        const sab = new Date(nowCR);
+        sab.setDate(sab.getDate() - 1);
+        return sab.toISOString().split("T")[0];
+      }
+      if (dia === 1) {
+        const sab = new Date(nowCR);
+        sab.setDate(sab.getDate() - 2);
+        return sab.toISOString().split("T")[0];
+      }
+    }
+
+    const d = new Date(nowCR);
+    d.setDate(nowCR.getDate() - n);
+    return d.toISOString().split("T")[0];
   };
 
   const formatFechaLargoCR = (iso) => {
     if (!iso) return "";
-    const fecha = parseISOasCRDate(iso);
-    const opciones = {
-      timeZone: TZ,
-      weekday: "long",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    };
-    const texto = fecha
-      .toLocaleDateString("es-CR", opciones)
-      .replace(/\.$/, "");
-    return texto.charAt(0).toUpperCase() + texto.slice(1);
+    const fecha = new Date(`${iso}T12:00:00`);
+    return fecha
+      .toLocaleDateString("es-CR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: TZ,
+      })
+      .replace(",", "");
   };
 
   const formatFechaCortoCR = (iso) => {
     if (!iso) return "";
-    const fecha = parseISOasCRDate(iso);
-    return fecha
-      .toLocaleDateString("es-CR", {
-        timeZone: TZ,
-        day: "2-digit",
-        month: "short",
-      })
-      .replace(/\.$/, "");
+    const fecha = new Date(`${iso}T12:00:00`);
+    return fecha.toLocaleDateString("es-CR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      timeZone: TZ,
+    });
   };
 
-  /* ---------------------------------------------------------------------------
-     HELPERS — COLORES, SEMÁFOROS, FORMATOS
-     --------------------------------------------------------------------------- */
-  const getBarColor = (p) => {
-    if (p >= 100) return "bg-green-600";
-    if (p >= 80) return "bg-yellow-400";
-    if (p >= 50) return "bg-orange-500";
-    return "bg-red-600";
-  };
-
-  const getPctTextColor = (p) => {
-    if (p >= 100) return "text-green-600";
-    if (p >= 80) return "text-yellow-500";
-    if (p >= 50) return "text-orange-500";
-    return "text-red-600";
-  };
-
-  const getEffTextColor = (pEff) =>
-    pEff < 80 ? "text-red-600" : "text-green-600";
-
+  // ============================
+  // SEMÁFORO
+  // ============================
   const obtenerSemaforo = (p) => {
     if (p >= 100) return "🟢";
     if (p >= 80) return "🟡";
@@ -101,6 +87,9 @@ export default function SupervisorMenu({ usuario }) {
     return "🔴";
   };
 
+  // ============================
+  // FORMATOS
+  // ============================
   const formatNumber = (num) => {
     if (num === null || num === undefined || isNaN(num)) return "N/D";
     return parseFloat(num).toLocaleString("en-US", {
@@ -109,8 +98,268 @@ export default function SupervisorMenu({ usuario }) {
     });
   };
 
-  const formatHora = (a) => {
+  // =====================================================================
+  // CARGAR AGENTES BASE (usa SIEMPRE ruta_norm)
+  // =====================================================================
+  const cargarAgentesBase = useCallback(async () => {
+  let q = supabase
+    .from("agentes")
+    .select("telefono, nombre, region, ruta_norm, activo, tipo")
+    .eq("activo", true)
+    .eq("tipo", "agente");
+
+  if (usuario.acceso === "regional") {
+    // Solución para GTE: usar ilike para regiones que empiezan con el nombre del supervisor
+    q = q.ilike("region", `${usuario.region}%`);
+  }
+  if (usuario.acceso === "ruta") {
+    q = q.eq("ruta_norm", usuario.ruta_norm);
+  }
+
+  const { data } = await q;
+  return data || [];
+}, [usuario]);
+
+  // =====================================================================
+  // CARGAR DESABASTO POR RUTA (CORREGIDO: con fecha_carga_cr_dia, ruta_norm)
+  // =====================================================================
+  const cargarDesabastoRuta = async (rutaNorm, fechaISO) => {
+    const query = supabase
+      .from("vw_desabasto_unicos_cr")
+      .select(`
+        mdn_usuario,
+        pdv,
+        saldo,
+        promedio_semanal,
+        saldo_menor_al_promedio_diario,
+        fecha_carga_cr,
+        ruta_norm
+      `)
+      .eq("ruta_norm", rutaNorm)
+      .in("saldo_menor_al_promedio_diario", [
+        "Menor al 25%",
+        "Menor al 50%",
+        "Menor al 75%",
+      ])
+      .eq("fecha_carga_cr_dia", fechaISO); // <-- Usando la columna calculada
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("ERROR desabasto:", error);
+      return []; // Devuelve array vacío en caso de error
+    }
+
+    return data || [];
+  };
+
+  // =====================================================================
+  // CARGAR ATENCIONES (TELÉFONO DEL AGENTE, con fecha_dia)
+  // =====================================================================
+  const cargarAtencionesAgente = async (telefono, fechaISO) => {
+    const query = supabase
+      .from("atenciones_agentes")
+      .select(`
+        id,
+        mdn_usuario,
+        pdv,
+        resultado,
+        motivo_no_efectivo,
+        created_at
+      `)
+      .eq("agente", telefono)
+      .eq("fecha_dia", fechaISO); // <-- Usando la columna calculada
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("ERROR atenciones:", error);
+      return [];
+    }
+
+    return data || [];
+  };
+
+  // =====================================================================
+  // CARGA PRINCIPAL (hoy / día anterior)
+  // =====================================================================
+  const cargarAgentesDelDia = useCallback(
+    async (offset = 0) => {
+      setLoading(true);
+
+      const fechaObjetivo = offset === 0 ? hoyISO() : isoNDiasAtras(offset);
+      const agentesBase = await cargarAgentesBase();
+
+      let totalZonaDesabasto = 0;
+      let totalZonaAtendidos = 0;
+      let totalZonaEfectivos = 0;
+
+      const agentesConDatos = await Promise.all(
+        agentesBase.map(async (ag) => {
+          const desabasto = await cargarDesabastoRuta(ag.ruta_norm, fechaObjetivo);
+          const atenciones = await cargarAtencionesAgente(ag.telefono, fechaObjetivo);
+
+          const totalDesabasto = desabasto.length;
+          const totalAtendidos = atenciones.length;
+          const efectivos = atenciones.filter((a) => a.resultado === "efectivo").length;
+
+          const porcentajeAvance =
+            totalDesabasto > 0 ? Math.round((totalAtendidos / totalDesabasto) * 100) : 0;
+
+          const porcentajeEfectivos =
+            totalAtendidos > 0 ? Math.round((efectivos / totalAtendidos) * 100) : 0;
+
+          totalZonaDesabasto += totalDesabasto;
+          totalZonaAtendidos += totalAtendidos;
+          totalZonaEfectivos += efectivos;
+
+          let colorBarra = "bg-red-600";
+          if (porcentajeAvance >= 100) colorBarra = "bg-green-600";
+          else if (porcentajeAvance >= 80) colorBarra = "bg-yellow-400";
+          else if (porcentajeAvance >= 50) colorBarra = "bg-orange-500";
+
+          return {
+            ...ag,
+            totalDesabasto,
+            totalAtendidos,
+            porcentajeAvance,
+            porcentajeEfectivos,
+            efectivos,
+            colorBarra,
+            semaforo: obtenerSemaforo(porcentajeAvance),
+          };
+        })
+      );
+
+      const ordenados = agentesConDatos
+        .sort((a, b) => b.porcentajeAvance - a.porcentajeAvance)
+        .map((a, idx) => ({
+          ...a,
+          ranking: idx + 1,
+          totalAgentes: agentesConDatos.length,
+        }));
+
+      const porcentajeZona =
+        totalZonaDesabasto > 0
+          ? Math.round((totalZonaAtendidos / totalZonaDesabasto) * 100)
+          : 0;
+
+      const porcentajeEfectivosZona =
+        totalZonaAtendidos > 0
+          ? Math.round((totalZonaEfectivos / totalZonaAtendidos) * 100)
+          : 0;
+
+      let colorZona = "bg-red-600";
+      if (porcentajeZona >= 100) colorZona = "bg-green-600";
+      else if (porcentajeZona >= 80) colorZona = "bg-yellow-400";
+      else if (porcentajeZona >= 50) colorZona = "bg-orange-500";
+
+      setResumenZona({
+        totalZonaDesabasto,
+        totalZonaAtendidos,
+        porcentajeZona,
+        porcentajeEfectivosZona,
+        colorZona,
+        semaforo: obtenerSemaforo(porcentajeZona),
+      });
+
+      setAgentes(ordenados);
+      setLoading(false);
+    },
+    [cargarAgentesBase, cargarDesabastoRuta, cargarAtencionesAgente]
+  );
+
+  // =====================================================================
+  // CARGAR DETALLES DE UNA RUTA / AGENTE (CORREGIDO: con fecha_dia, telefono)
+  // =====================================================================
+  const cargarDetallesRuta = async (rutaNorm, telefonoAgente, nombreAgente) => {
+    setLoading(true);
+
+    const fechaObjetivo = vista === "anterior" ? isoNDiasAtras(1) : hoyISO();
+
+    const { data: registros } = await supabase
+      .from("vw_desabasto_unicos_cr")
+      .select(`
+        mdn_usuario,
+        pdv,
+        saldo,
+        promedio_semanal,
+        saldo_menor_al_promedio_diario,
+        fecha_carga_cr,
+        ruta_norm
+      `)
+      .eq("ruta_norm", rutaNorm)
+      .in("saldo_menor_al_promedio_diario", [
+        "Menor al 25%",
+        "Menor al 50%",
+        "Menor al 75%",
+      ])
+      .eq("fecha_carga_cr_dia", fechaObjetivo); // <-- Usando la columna calculada
+
+    const { data: atenciones } = await supabase
+      .from("atenciones_agentes")
+      .select(`
+        id,
+        mdn_usuario,
+        pdv,
+        hora,
+        created_at,
+        resultado,
+        motivo_no_efectivo
+      `)
+      .eq("agente", telefonoAgente) // <-- Usando telefono
+      .eq("fecha_dia", fechaObjetivo); // <-- Usando la columna calculada
+
+    const atendidosIds = new Set(
+      (atenciones || []).map((a) => String(a.mdn_usuario))
+    );
+
+    const pendientes = (registros || [])
+      .filter((r) => !atendidosIds.has(String(r.mdn_usuario)))
+      .map((r) => {
+        const t = (r.saldo_menor_al_promedio_diario || "").toLowerCase();
+        let porcentaje = 100;
+        if (t.includes("25")) porcentaje = 25;
+        else if (t.includes("50")) porcentaje = 50;
+        else if (t.includes("75")) porcentaje = 75;
+
+        return { ...r, porcentaje, mdn_usuario: String(r.mdn_usuario) };
+      })
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+
+    const totalDesabasto = registros?.length || 0;
+    const totalAtendidos = atenciones?.length || 0;
+
+    const porcentajeAvance =
+      totalDesabasto > 0
+        ? Math.round((totalAtendidos / totalDesabasto) * 100)
+        : 0;
+
+    let colorRuta = "bg-red-600";
+    if (porcentajeAvance >= 100) colorRuta = "bg-green-600";
+    else if (porcentajeAvance >= 80) colorRuta = "bg-yellow-400";
+    else if (porcentajeAvance >= 50) colorRuta = "bg-orange-500";
+
+    setDetalles({
+      rutaNorm,
+      nombreAgente,
+      telefonoAgente,
+      fechaObjetivo,
+      totalDesabasto,
+      totalAtendidos,
+      porcentajeAvance,
+      colorRuta,
+      semaforo: obtenerSemaforo(porcentajeAvance),
+      atenciones: atenciones || [],
+      pendientes,
+    });
+
+    setLoading(false);
+  };
+
+  const formatHoraDet = (a) => {
     if (a.hora) return a.hora;
+
     try {
       return new Date(a.created_at).toLocaleTimeString("es-CR", {
         hour: "2-digit",
@@ -122,571 +371,48 @@ export default function SupervisorMenu({ usuario }) {
     }
   };
 
-  /* ---------------------------------------------------------------------------
-     FUNCIÓN PRINCIPAL: CARGA DE AGENTES (HOY O AYER)
-     --------------------------------------------------------------------------- */
-  const cargarAgentesGenerico = useCallback(
-    async (offsetDias = 0) => {
-      setLoading(true);
-      try {
-        const fecha = isoNDiasAtras(offsetDias);
+  // =====================================================================
+  // VISTA DETALLE RUTA (Integrada en VistaSeguimiento)
+  // =====================================================================
+  const VistaDetalleRuta = ({ detalles, onVolver }) => {
+    if (!detalles) return null; // Asegura que detalles exista
 
-        let query = supabase
-          .from("agentes")
-          .select("*")
-          .ilike("tipo", "%agente%")
-          .eq("activo", true);
-
-        if (usuario.acceso === "regional") {
-          query = query.ilike("region", `%${usuario.region}%`);
-        }
-
-        const { data: agentesData, error: agentesError } = await query;
-        if (agentesError) throw agentesError;
-
-        let totalZonaDesabasto = 0;
-        let totalZonaAtendidos = 0;
-        let totalZonaEfectivos = 0;
-
-        const agentesConDatos = await Promise.all(
-          (agentesData || []).map(async (agente) => {
-            const fechaInicio = `${fecha}T00:00:00`;
-            const fechaFin = `${fecha}T23:59:59`;
-
-            const { data: registros } = await supabase
-              .from("vw_desabasto_unicos")
-              .select("mdn_usuario, jerarquias_n3_ruta")
-              .ilike("jerarquias_n3_ruta", `%${agente.ruta_excel}%`)
-              .in("saldo_menor_al_promedio_diario", [
-                "Menor al 25%",
-                "Menor al 50%",
-                "Menor al 75%",
-              ])
-              .gte("fecha_carga", fechaInicio)
-              .lte("fecha_carga", fechaFin);
-
-            const { data: atenciones } = await supabase
-              .from("atenciones_agentes")
-              .select("mdn_usuario, resultado")
-              .eq("agente", agente.nombre)
-              .eq("fecha", fecha);
-
-            const totalDesabasto = registros?.length || 0;
-            const totalAtendidos = atenciones?.length || 0;
-            const efectivosAgente = (atenciones || []).filter(
-              (a) => a.resultado === "efectivo"
-            ).length;
-
-            const porcentajeAvance =
-              totalDesabasto > 0
-                ? Math.round((totalAtendidos / totalDesabasto) * 100)
-                : 0;
-
-            const porcentajeEfectivosAgente =
-              totalAtendidos > 0
-                ? Math.round((efectivosAgente / totalAtendidos) * 100)
-                : 0;
-
-            totalZonaDesabasto += totalDesabasto;
-            totalZonaAtendidos += totalAtendidos;
-            totalZonaEfectivos += efectivosAgente;
-
-            return {
-              ...agente,
-              totalDesabasto,
-              totalAtendidos,
-              porcentajeAvance,
-              porcentajeEfectivosAgente,
-              semaforo: obtenerSemaforo(porcentajeAvance),
-            };
-          })
-        );
-
-        const ordenados = agentesConDatos
-          .sort((a, b) => b.porcentajeAvance - a.porcentajeAvance)
-          .map((a, index) => ({
-            ...a,
-            ranking: index + 1,
-            totalAgentes: agentesConDatos.length,
-          }));
-
-        const porcentajeZona =
-          totalZonaDesabasto > 0
-            ? Math.round((totalZonaAtendidos / totalZonaDesabasto) * 100)
-            : 0;
-
-        const porcentajeEfectivosZona =
-          totalZonaAtendidos > 0
-            ? Math.round((totalZonaEfectivos / totalZonaAtendidos) * 100)
-            : 0;
-
-        setResumenZona({
-          totalZonaDesabasto,
-          totalZonaAtendidos,
-          porcentajeZona,
-          porcentajeEfectivosZona,
-          semaforo: obtenerSemaforo(porcentajeZona),
-        });
-
-        setAgentes(ordenados);
-      } catch (error) {
-        console.error("Error al cargar agentes:", error.message);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [usuario]
-  );
-
-  /* ---------------------------------------------------------------------------
-     CARGA HISTÓRICO 7 DÍAS
-     --------------------------------------------------------------------------- */
-  const cargarResumenHistorico = useCallback(async () => {
-    setLoading(true);
-    try {
-      let queryAgentes = supabase
-        .from("agentes")
-        .select("nombre, ruta_excel, region")
-        .ilike("tipo", "%agente%")
-        .eq("activo", true);
-
-      if (usuario.acceso === "regional") {
-        queryAgentes = queryAgentes.ilike("region", `%${usuario.region}%`);
-      }
-
-      const { data: agentesData } = await queryAgentes;
-      if (!agentesData || agentesData.length === 0) {
-        setHistorico([]);
-        setFechaRango({ inicio: null, fin: null });
-        setLoading(false);
-        return;
-      }
-
-      const dias = Array.from({ length: 7 }, (_, i) => isoNDiasAtras(6 - i));
-      const historicoData = [];
-
-      for (const fecha of dias) {
-        const inicio = `${fecha}T00:00:00`;
-        const fin = `${fecha}T23:59:59`;
-
-        const { data: registrosDia } = await supabase
-          .from("vw_desabasto_unicos")
-          .select("jerarquias_n3_ruta, mdn_usuario, fecha_carga")
-          .gte("fecha_carga", inicio)
-          .lte("fecha_carga", fin);
-
-        const { data: atencionesDia } = await supabase
-          .from("atenciones_agentes")
-          .select("agente, resultado, mdn_usuario")
-          .eq("fecha", fecha);
-
-        (agentesData || []).forEach((ag) => {
-          const desabastoAg =
-            (registrosDia || []).filter((r) =>
-              r.jerarquias_n3_ruta?.includes(ag.ruta_excel)
-            ).length || 0;
-
-          const atencionesAg = (atencionesDia || []).filter(
-            (a) => a.agente === ag.nombre
-          );
-
-          const totalAtendidos = atencionesAg.length;
-          const efectivos = atencionesAg.filter(
-            (a) => a.resultado === "efectivo"
-          ).length;
-
-          const porcentajeAvance =
-            desabastoAg > 0
-              ? Math.round((totalAtendidos / desabastoAg) * 100)
-              : 0;
-
-          const porcentajeEfectivos =
-            totalAtendidos > 0
-              ? Math.round((efectivos / totalAtendidos) * 100)
-              : 0;
-
-          historicoData.push({
-            fecha,
-            agente: ag.nombre,
-            desabasto: desabastoAg,
-            atendidos: totalAtendidos,
-            porcentajeAvance,
-            porcentajeEfectivos,
-          });
-        });
-      }
-
-      const filtrados = historicoData.filter(
-        (r) => r.desabasto > 0 || r.atendidos > 0
-      );
-
-      setHistorico(filtrados);
-      setFechaRango({ inicio: dias[0], fin: dias[dias.length - 1] });
-    } catch (err) {
-      console.error("Error al cargar histórico:", err.message);
-      setHistorico([]);
-      setFechaRango({ inicio: null, fin: null });
-    } finally {
-      setLoading(false);
-    }
-  }, [usuario]);
-
-  /* ---------------------------------------------------------------------------
-     VARIABLES DERIVADAS DEL RESUMEN DE ZONA
-     --------------------------------------------------------------------------- */
-  const {
-    totalZonaDesabasto = 0,
-    totalZonaAtendidos = 0,
-    porcentajeZona = 0,
-    porcentajeEfectivosZona = 0,
-    semaforo = "🔴",
-  } = resumenZona;
-
-  const barClass = getBarColor(porcentajeZona);
-  const pctClass = getPctTextColor(porcentajeZona);
-  const effClass = getEffTextColor(porcentajeEfectivosZona);
-
-  /* ---------------------------------------------------------------------------
-     DETALLES POR AGENTE / RUTA
-     --------------------------------------------------------------------------- */
-  const cargarDetalles = async (agenteObj) => {
-    setLoading(true);
-    try {
-      const ruta = agenteObj.ruta_excel;
-      const agenteNombre = agenteObj.nombre;
-      const fechaObjetivo = vista === "anterior" ? isoNDiasAtras(1) : hoyISO();
-      const inicio = `${fechaObjetivo}T00:00:00`;
-      const fin = `${fechaObjetivo}T23:59:59`;
-
-      // Desabasto del día
-      const { data: registros } = await supabase
-        .from("vw_desabasto_unicos")
-        .select(
-          "mdn_usuario, pdv, saldo, promedio_semanal, fecha_ultima_compra, saldo_menor_al_promedio_diario, fecha_carga, jerarquias_n3_ruta"
-        )
-        .ilike("jerarquias_n3_ruta", `%${ruta}%`)
-        .in("saldo_menor_al_promedio_diario", [
-          "Menor al 25%",
-          "Menor al 50%",
-          "Menor al 75%",
-        ])
-        .gte("fecha_carga", inicio)
-        .lte("fecha_carga", fin);
-
-      // Atenciones del día
-      const { data: atenciones } = await supabase
-        .from("atenciones_agentes")
-        .select(
-          "id, mdn_usuario, pdv, hora, created_at, resultado, motivo_no_efectivo"
-        )
-        .eq("agente", agenteNombre)
-        .eq("fecha", fechaObjetivo);
-
-      const atendidosIds = new Set(
-        (atenciones || []).map((a) => String(a.mdn_usuario))
-      );
-
-      // Pendientes
-      const pendientes = (registros || [])
-        .filter((r) => !atendidosIds.has(String(r.mdn_usuario)))
-        .map((r) => {
-          const t = (r.saldo_menor_al_promedio_diario || "").toLowerCase();
-          let porcentaje = 100;
-          if (t.includes("25")) porcentaje = 25;
-          else if (t.includes("50")) porcentaje = 50;
-          else if (t.includes("75")) porcentaje = 75;
-
-          return { ...r, porcentaje, mdn_usuario: String(r.mdn_usuario) };
-        })
-        .sort((a, b) => a.porcentaje - b.porcentaje);
-
-      const totalDesabasto = registros?.length || 0;
-      const totalAtendidos = atenciones?.length || 0;
-      const porcentajeAvance =
-        totalDesabasto > 0
-          ? Math.round((totalAtendidos / totalDesabasto) * 100)
-          : 0;
-
-      setDetalles({
-        ruta,
-        agenteNombre,
-        fechaObjetivo,
-        totalDesabasto,
-        totalAtendidos,
-        porcentajeAvance,
-        atenciones: atenciones || [],
-        pendientes,
-        semaforo: obtenerSemaforo(porcentajeAvance),
-      });
-    } catch (err) {
-      console.error("Error al cargar detalles:", err.message);
-      setDetalles(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ---------------------------------------------------------------------------
-     EFFECT: CAMBIO DE VISTA ACTIVA
-     --------------------------------------------------------------------------- */
-  useEffect(() => {
-    if (vista === "menu") {
-      setLoading(false);
-      return;
-    }
-    if (vista === "actual") cargarAgentesGenerico(0);
-    if (vista === "anterior") cargarAgentesGenerico(1);
-    if (vista === "historico") cargarResumenHistorico();
-  }, [vista]);
-
-  /* ---------------------------------------------------------------------------
-     VISTA: MENÚ PRINCIPAL
-     --------------------------------------------------------------------------- */
-  if (vista === "menu") {
-    return (
-      <div className="min-h-screen sm:min-h-[90vh] bg-gray-100 flex items-center justify-center px-4 py-10">
-        <div className="bg-white shadow-lg rounded-3xl p-8 text-center max-w-md w-full">
-          <h2 className="text-xl font-semibold mb-6 text-gray-800">
-            Supervisión — {usuario.region}
-          </h2>
-
-          <div className="space-y-4">
-            <button
-              onClick={() => setVista("actual")}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold"
-            >
-              📊 Seguimiento Desabasto (Hoy)
-            </button>
-
-            <button
-              onClick={() => setVista("anterior")}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-4 rounded-lg font-semibold"
-            >
-              📅 Revisar Desabasto Día Anterior
-            </button>
-
-            <button
-              onClick={() => setVista("historico")}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold"
-            >
-              📈 Resumen de Avance por Agente (7 días)
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------------------------------------------------------------------------
-     VISTA: HISTÓRICO (7 días)
-     --------------------------------------------------------------------------- */
-  if (vista === "historico") {
-    const grupos = historico.reduce((acc, r) => {
-      if (!acc[r.agente]) acc[r.agente] = [];
-      acc[r.agente].push(r);
-      return acc;
-    }, {});
-
-    const agentesOrdenados = Object.entries(grupos)
-      .map(([agente, registros]) => {
-        const avgAvance =
-          registros.reduce((s, r) => s + (r.porcentajeAvance || 0), 0) /
-          registros.length;
-
-        const avgEfectivos =
-          registros.reduce((s, r) => s + (r.porcentajeEfectivos || 0), 0) /
-          registros.length;
-
-        return {
-          agente,
-          registros,
-          avgAvance: Math.round(avgAvance),
-          avgEfectivos: Math.round(avgEfectivos),
-        };
-      })
-      .sort((a, b) => b.avgAvance - a.avgAvance);
-
-    return (
-      <div className="min-h-screen sm:min-h-[90vh] bg-gray-100 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10 overflow-hidden">
-        <div className="bg-white shadow-lg rounded-3xl p-6 w-full max-w-5xl">
-          <div className="flex flex-col items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-800 text-center">
-              📈 Resumen Histórico — Últimos 7 días — Región {usuario.region}
-            </h2>
-
-            {fechaRango.inicio && fechaRango.fin && (
-              <p className="text-sm text-gray-600 mt-1 text-center">
-                📆 Datos desde {formatFechaLargoCR(fechaRango.inicio)} hasta{" "}
-                {formatFechaLargoCR(fechaRango.fin)}
-              </p>
-            )}
-
-            <div className="flex justify-center gap-3 mt-3">
-              <button
-                onClick={() => setVista("menu")}
-                className="text-sm bg-blue-600 text-white py-1 px-4 rounded-lg hover:bg-blue-700"
-              >
-                ⬅ Volver al menú
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="text-center text-gray-500 mt-4">Cargando...</p>
-          ) : agentesOrdenados.length === 0 ? (
-            <p className="text-center text-gray-500 mt-4">
-              No hay datos históricos disponibles.
-            </p>
-          ) : (
-            agentesOrdenados.map((ag, idx) => (
-              <div key={ag.agente} className="mb-6 border-t border-gray-300 pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-md font-bold text-gray-800">
-                    {idx + 1}. 👤 {ag.agente}
-                  </h3>
-
-                  <p className="text-sm text-gray-600">
-                    Avance promedio:{" "}
-                    <span
-                      className={
-                        ag.avgAvance >= 100
-                          ? "text-green-600 font-semibold"
-                          : ag.avgAvance >= 80
-                          ? "text-yellow-600 font-semibold"
-                          : ag.avgAvance >= 50
-                          ? "text-orange-600 font-semibold"
-                          : "text-red-600 font-semibold"
-                      }
-                    >
-                      {ag.avgAvance}%
-                    </span>{" "}
-                    | Efectivos:{" "}
-                    <span className={`font-semibold ${getEffTextColor(ag.avgEfectivos)}`}>
-                      {ag.avgEfectivos}%
-                    </span>
-                  </p>
-                </div>
-
-                <div className="relative overflow-x-auto border rounded-lg shadow-sm">
-                  <table className="min-w-[600px] w-full text-sm border-collapse">
-                    <thead className="bg-gray-200 text-gray-800 sticky top-0 z-10">
-                      <tr>
-                        <th className="p-2 text-left">Fecha</th>
-                        <th className="p-2 text-center">Desabasto</th>
-                        <th className="p-2 text-center">Atendidos</th>
-                        <th className="p-2 text-center">% Avance</th>
-                        <th className="p-2 text-center">% Efectivos</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {ag.registros.map((r, i) => (
-                        <tr
-                          key={i}
-                          className="border-b hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="p-2">{formatFechaCortoCR(r.fecha)}</td>
-                          <td className="p-2 text-center">{r.desabasto}</td>
-                          <td className="p-2 text-center">{r.atendidos}</td>
-
-                          <td
-                            className={`p-2 text-center font-semibold ${getPctTextColor(
-                              r.porcentajeAvance
-                            )}`}
-                          >
-                            {r.porcentajeAvance}%
-                          </td>
-
-                          <td
-                            className={`p-2 text-center font-semibold ${getEffTextColor(
-                              r.porcentajeEfectivos
-                            )}`}
-                          >
-                            {r.porcentajeEfectivos}%
-                          </td>
-                        </tr>
-                      ))}
-
-                      <tr className="bg-gray-100 font-semibold">
-                        <td className="p-2 text-center">Promedio</td>
-                        <td className="p-2 text-center">—</td>
-                        <td className="p-2 text-center">—</td>
-
-                        <td className={`p-2 text-center ${getPctTextColor(ag.avgAvance)}`}>
-                          {ag.avgAvance}%
-                        </td>
-
-                        <td className={`p-2 text-center ${getEffTextColor(ag.avgEfectivos)}`}>
-                          {ag.avgEfectivos}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------------------------------------------------------------------------
-     VISTA: DETALLES DEL AGENTE / RUTA
-     --------------------------------------------------------------------------- */
-  if (detalles) {
     const {
-      ruta,
-      pendientes = [],
+      rutaNorm,
+      nombreAgente,
+      fechaObjetivo,
+      pendientes,
       porcentajeAvance,
+      colorRuta,
       totalDesabasto,
       totalAtendidos,
-      atenciones = [],
-      semaforo: semaforoRuta,
-      fechaObjetivo,
+      atenciones,
+      semaforo,
     } = detalles;
 
     const efectivos = atenciones.filter((a) => a.resultado === "efectivo").length;
     const noEfectivos = atenciones.filter((a) => a.resultado === "no efectivo").length;
-
     const total = atenciones.length || 1;
+
     const porcentajeEfectivos = Math.round((efectivos / total) * 100);
     const porcentajeNoEfectivos = Math.round((noEfectivos / total) * 100);
-
-    // === Motivos No Compra → chips rojos ===
-    const motivosMap = {};
-    (atenciones || []).forEach((a) => {
-      if (a.resultado === "no efectivo" && a.motivo_no_efectivo) {
-        const m = a.motivo_no_efectivo.trim();
-        motivosMap[m] = (motivosMap[m] || 0) + 1;
-      }
-    });
-
-    const totalMotivos = Object.values(motivosMap).reduce((s, x) => s + x, 0);
-
-    const motivosOrdenados = Object.entries(motivosMap)
-      .map(([motivo, count]) => ({
-        motivo,
-        count,
-        pct: totalMotivos ? ((count / totalMotivos) * 100).toFixed(2) : "0.00",
-      }))
-      .sort((a, b) => b.count - a.count || a.motivo.localeCompare(b.motivo));
 
     return (
       <div className="min-h-screen sm:min-h-[90vh] bg-gray-100 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10 overflow-hidden">
         <div className="bg-white shadow-lg rounded-3xl p-6 w-full max-w-4xl animate-fadeIn">
+
           <div className="flex flex-col items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800 text-center">
-              {semaforoRuta} Avance de atención — {ruta}
+              {semaforo} Avance de atención — {rutaNorm}
             </h2>
-
+            <p className="text-xs text-gray-500">Agente: {nombreAgente}</p>
             <p className="text-xs text-gray-500">
               Fecha: {formatFechaLargoCR(fechaObjetivo)}
             </p>
 
             <div className="flex justify-center gap-3 mt-3">
               <button
-                onClick={() => setDetalles(null)}
+                onClick={onVolver} // Llama a la función para volver a la vista de agentes
                 className="text-sm bg-blue-600 text-white py-1 px-4 rounded-lg hover:bg-blue-700"
               >
                 ⬅ Volver
@@ -694,25 +420,19 @@ export default function SupervisorMenu({ usuario }) {
             </div>
           </div>
 
-          {/* Barra de avance */}
           <div className="bg-gray-300 rounded-full h-4 overflow-hidden mb-2">
             <div
-              className={`${getBarColor(porcentajeAvance)} h-4 transition-all duration-500`}
+              className={`${colorRuta} h-4 transition-all duration-500`}
               style={{ width: `${porcentajeAvance}%` }}
             />
           </div>
 
-          <p className="text-sm text-center mb-4">
-            <span className={`font-semibold ${getPctTextColor(porcentajeAvance)}`}>
-              {totalAtendidos} de {totalDesabasto} PDV atendidos ({porcentajeAvance}%)
-            </span>{" "}
-            |{" "}
-            <span className={`font-semibold ${getEffTextColor(porcentajeEfectivos)}`}>
-              Efectivos: {porcentajeEfectivos}%
-            </span>
+          <p className="text-sm text-center text-gray-700 mb-4">
+            {totalAtendidos} de {totalDesabasto} PDV atendidos ({porcentajeAvance}%) |
+            Efectivos: {porcentajeEfectivos}% — No efectivos: {porcentajeNoEfectivos}%
           </p>
 
-          {/* PDV pendientes */}
+          {/* Pendientes */}
           {pendientes.length === 0 ? (
             <p className="text-center text-gray-600 mt-4">
               Todos los PDV en desabasto fueron atendidos ✅
@@ -725,8 +445,9 @@ export default function SupervisorMenu({ usuario }) {
                   className="rounded-xl shadow-md p-4 flex flex-col justify-between border border-gray-200 bg-white"
                 >
                   <div>
-                    <p className="text-xs text-gray-500">MDN: {pdv.mdn_usuario}</p>
-
+                    <p className="text-xs text-gray-500">
+                      MDN: {pdv.mdn_usuario}
+                    </p>
                     <h3 className="text-base font-bold text-gray-800">{pdv.pdv}</h3>
 
                     <p className="text-sm text-gray-700">
@@ -737,12 +458,13 @@ export default function SupervisorMenu({ usuario }) {
                       Promedio semanal: {formatNumber(pdv.promedio_semanal)}
                     </p>
 
-                    <p className="text-sm text-gray-600">
+                    {/* Comentado porque fecha_ultima_compra no está en la vista */}
+                    {/* <p className="text-sm text-gray-600">
                       Última compra:{" "}
                       {pdv.fecha_ultima_compra
                         ? new Date(pdv.fecha_ultima_compra).toLocaleDateString("es-CR")
                         : "N/D"}
-                    </p>
+                    </p> */}
 
                     <p
                       className={`text-xs font-semibold mt-1 ${
@@ -753,7 +475,7 @@ export default function SupervisorMenu({ usuario }) {
                           : "text-yellow-500"
                       }`}
                     >
-                      Desabasto: {pdv.porcentaje} %
+                      Desabasto: {pdv.porcentaje}%
                     </p>
                   </div>
                 </div>
@@ -761,28 +483,7 @@ export default function SupervisorMenu({ usuario }) {
             </div>
           )}
 
-          {/* Resumen del día */}
-          {atenciones.length > 0 && (
-            <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 mt-6">
-              <h3 className="text-sm font-semibold text-center text-gray-800 mb-2">
-                Resumen de resultados del día
-              </h3>
-
-              <div className="flex items-center justify-center gap-10">
-                <div className="flex items-center gap-2 text-green-600 text-sm font-semibold">
-                  <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
-                  Efectivos: {efectivos} ({porcentajeEfectivos}%)
-                </div>
-
-                <div className="flex items-center gap-2 text-red-600 text-sm font-semibold">
-                  <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
-                  No efectivos: {noEfectivos} ({porcentajeNoEfectivos}%)
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Atenciones del día */}
+          {/* Atendidos */}
           {atenciones.length > 0 && (
             <div className="mt-6 bg-gray-50 rounded-xl border border-gray-200 shadow p-4">
               <h3 className="text-md font-semibold text-gray-800 text-center mb-2">
@@ -810,198 +511,436 @@ export default function SupervisorMenu({ usuario }) {
                         MDN: {a.mdn_usuario}
                       </p>
 
-                      {a.resultado === "no efectivo" &&
-                        a.motivo_no_efectivo && (
-                          <p className="text-xs text-gray-600 italic">
-                            Motivo: {a.motivo_no_efectivo}
-                          </p>
-                        )}
+                      {a.resultado === "no efectivo" && a.motivo_no_efectivo && (
+                        <p className="text-xs text-gray-600 italic">
+                          Motivo: {a.motivo_no_efectivo}
+                        </p>
+                      )}
                     </div>
 
-                    <span className="text-xs text-gray-600">{formatHora(a)}</span>
+                    <span className="text-xs text-gray-600">
+                      {formatHoraDet(a)}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Motivos No Compra */}
-          {motivosOrdenados.length > 0 && (
-            <div className="mt-6 bg-gray-50 rounded-2xl border border-gray-200 p-4">
-              <h4 className="text-sm font-semibold text-center text-gray-800 mb-2">
-                🧾 Razones No Compra
-              </h4>
+        </div>
+      </div>
+    );
+  };
 
-              <div className="flex flex-wrap justify-center gap-2">
-                {motivosOrdenados.map((m, i) => (
-                  <span
-                    key={i}
-                    className="px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-700"
-                  >
-                    {m.motivo}: {m.count} ({m.pct}%)
-                  </span>
-                ))}
+  // =====================================================================
+  // HISTÓRICO 7 DÍAS (con fecha_dia)
+  // =====================================================================
+  const cargarHistorico7Dias = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      let queryAgentes = supabase
+        .from("agentes")
+        .select("nombre, telefono, ruta_norm, region")
+        .eq("activo", true)
+        .eq("tipo", "agente");
+
+      if (usuario.acceso === "regional") {
+        queryAgentes = queryAgentes.eq("region", usuario.region);
+      }
+
+      const { data: agentesData } = await queryAgentes;
+      if (!agentesData || agentesData.length === 0) {
+        setHistorico([]);
+        return setFechaRango({ inicio: null, fin: null });
+      }
+
+      const dias = Array.from({ length: 7 }, (_, i) => isoNDiasAtras(6 - i));
+      const historicoData = [];
+
+      for (const fecha of dias) {
+        const { data: registrosDia } = await supabase
+          .from("vw_desabasto_unicos_cr")
+          .select("mdn_usuario, ruta_norm, fecha_carga_cr")
+          .eq("fecha_carga_cr_dia", fecha); // <-- Usando la columna calculada
+
+        for (const ag of agentesData) {
+          const totalDesabasto =
+            registrosDia?.filter((r) => r.ruta_norm === ag.ruta_norm).length || 0;
+
+          const { data: atencionesAgente } = await supabase
+            .from("atenciones_agentes")
+            .select("resultado, created_at")
+            .eq("agente", ag.telefono) // <-- Usando telefono
+            .eq("fecha_dia", fecha); // <-- Usando la columna calculada
+
+          const totalAtendidos = atencionesAgente?.length || 0;
+          const efectivos =
+            atencionesAgente?.filter((a) => a.resultado === "efectivo").length ||
+            0;
+
+          const porcentajeAvance =
+            totalDesabasto > 0
+              ? Math.round((totalAtendidos / totalDesabasto) * 100)
+              : 0;
+
+          const porcentajeEfectivos =
+            totalAtendidos > 0
+              ? Math.round((efectivos / totalAtendidos) * 100)
+              : 0;
+
+          historicoData.push({
+            fecha,
+            agente: ag.nombre,
+            telefono: ag.telefono,
+            ruta: ag.ruta_norm,
+            desabasto: totalDesabasto,
+            atendidos: totalAtendidos,
+            porcentajeAvance,
+            porcentajeEfectivos,
+          });
+        }
+      }
+
+      const filtrados = historicoData.filter(
+        (r) => r.desabasto > 0 || r.atendidos > 0
+      );
+
+      setHistorico(filtrados);
+      setFechaRango({ inicio: dias[0], fin: dias[dias.length - 1] });
+    } catch (err) {
+      console.error("ERROR en histórico:", err.message);
+      setHistorico([]);
+      setFechaRango({ inicio: null, fin: null });
+    } finally {
+      setLoading(false);
+    }
+  }, [usuario]);
+
+  // ---------------------------------------------------------------------
+  // VISTA HISTÓRICO
+  // ---------------------------------------------------------------------
+  const VistaHistorico = () => {
+    if (loading) {
+      return (
+        <p className="text-center text-gray-500 mt-6">Cargando histórico...</p>
+      );
+    }
+
+    if (!historico || historico.length === 0) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+          <div className="bg-white p-8 rounded-2xl shadow text-center">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">
+              No hay datos históricos
+            </h2>
+            <button
+              onClick={() => setVista("menu")}
+              className="bg-blue-600 text-white py-2 px-5 rounded-lg hover:bg-blue-700"
+            >
+              ⬅ Volver
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const grupos = historico.reduce((acc, r) => {
+      if (!acc[r.agente]) acc[r.agente] = [];
+      acc[r.agente].push(r);
+      return acc;
+    }, {});
+
+    const agentesOrdenados = Object.entries(grupos)
+      .map(([agente, registros]) => {
+        const avgAvance =
+          registros.reduce((s, r) => s + r.porcentajeAvance, 0) /
+          registros.length;
+        const avgEfectivos =
+          registros.reduce((s, r) => s + r.porcentajeEfectivos, 0) /
+          registros.length;
+
+        return {
+          agente,
+          registros,
+          avgAvance: Math.round(avgAvance),
+          avgEfectivos: Math.round(avgEfectivos),
+        };
+      })
+      .sort((a, b) => b.avgAvance - a.avgAvance);
+
+    return (
+      <div className="min-h-screen bg-gray-100 px-4 py-6 flex justify-center">
+        <div className="bg-white shadow-lg rounded-3xl p-6 w-full max-w-5xl">
+          <h2 className="text-lg font-semibold text-gray-800 text-center mb-2">
+            📈 Resumen Histórico — Últimos 7 días — Región {usuario.region}
+          </h2>
+
+          {fechaRango.inicio && (
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Desde {formatFechaLargoCR(fechaRango.inicio)} hasta{" "}
+              {formatFechaLargoCR(fechaRango.fin)}
+            </p>
+          )}
+
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={() => setVista("menu")}
+              className="bg-blue-600 text-white py-1 px-4 rounded-lg hover:bg-blue-700"
+            >
+              ⬅ Volver
+            </button>
+          </div>
+
+          {agentesOrdenados.map((ag, idx) => (
+            <div key={ag.agente} className="mb-6 border-t pt-4">
+              <h3 className="text-md font-bold text-gray-800 mb-2">
+                {idx + 1}. 👤 {ag.agente}
+              </h3>
+
+              <p className="text-sm text-gray-600 mb-2">
+                Promedio avance:{" "}
+                <span
+                  className={
+                    ag.avgAvance >= 100
+                      ? "text-green-600"
+                      : ag.avgAvance >= 80
+                      ? "text-yellow-600"
+                      : ag.avgAvance >= 50
+                      ? "text-orange-600"
+                      : "text-red-600"
+                  }
+                >
+                  {ag.avgAvance}%
+                </span>{" "}
+                | Efectivos:{" "}
+                <span className="text-blue-600">{ag.avgEfectivos}%</span>
+              </p>
+
+              <div className="overflow-x-auto border rounded-lg shadow-sm">
+                <table className="min-w-[600px] w-full text-sm">
+                  <thead className="bg-gray-200 text-gray-800">
+                    <tr>
+                      <th className="p-2 text-left">Fecha</th>
+                      <th className="p-2 text-center">Desabasto</th>
+                      <th className="p-2 text-center">Atendidos</th>
+                      <th className="p-2 text-center">% Avance</th>
+                      <th className="p-2 text-center">% Efectivos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ag.registros.map((r, i) => (
+                      <tr key={i} className="border-b hover:bg-gray-50 transition">
+                        <td className="p-2">{formatFechaCortoCR(r.fecha)}</td>
+                        <td className="p-2 text-center">{r.desabasto}</td>
+                        <td className="p-2 text-center">{r.atendidos}</td>
+                        <td
+                          className={`p-2 text-center font-semibold ${
+                            r.porcentajeAvance >= 100
+                              ? "text-green-600"
+                              : r.porcentajeAvance >= 80
+                              ? "text-yellow-600"
+                              : r.porcentajeAvance >= 50
+                              ? "text-orange-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {r.porcentajeAvance}%
+                        </td>
+                        <td className="p-2 text-center text-blue-600 font-semibold">
+                          {r.porcentajeEfectivos}%
+                        </td>
+                      </tr>
+                    ))}
+
+                    <tr className="bg-gray-100 font-semibold">
+                      <td className="p-2 text-center">Promedio</td>
+                      <td className="p-2 text-center">—</td>
+                      <td className="p-2 text-center">—</td>
+                      <td className="p-2 text-center">{ag.avgAvance}%</td>
+                      <td className="p-2 text-center">{ag.avgEfectivos}%</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // =====================================================================
+  // VISTAS PRINCIPALES (MENÚ, HOY, ANTERIOR)
+  // =====================================================================
+  const VistaMenu = () => (
+    <div className="min-h-screen sm:min-h-[90vh] bg-gray-100 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10 overflow-hidden">
+      <div className="flex flex-col justify-center items-center w-full px-4">
+        <div className="bg-white shadow-lg rounded-3xl p-8 text-center max-w-md w-full animate-fadeIn sm:mt-[-250px]">
+          <h2 className="text-xl font-semibold mb-6 text-gray-800">
+            Supervisión — {usuario.region}
+          </h2>
+
+          <div className="space-y-4">
+            <button
+              onClick={() => {
+                setVista("actual");
+                cargarAgentesDelDia(0);
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold"
+            >
+              📊 Seguimiento Desabasto (Hoy)
+            </button>
+
+            <button
+              onClick={() => {
+                setVista("anterior");
+                cargarAgentesDelDia(1);
+              }}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-4 rounded-lg font-semibold"
+            >
+              📅 Día Anterior
+            </button>
+
+            <button
+              onClick={() => {
+                setVista("historico");
+                cargarHistorico7Dias();
+              }}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold"
+            >
+              📈 Histórico 7 días
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ---------------------------------------------------------------------
+  // VISTA SEGUIMIENTO (HOY / AYER) - AHORA INCLUYE LA VISTA DE DETALLES
+  // ---------------------------------------------------------------------
+  const VistaSeguimiento = ({ offset }) => {
+    if (loading)
+      return (
+        <p className="text-center text-gray-500 mt-6">Cargando información…</p>
+      );
+
+    // Si detalles está definido, renderiza la vista de detalles
+    if (detalles) {
+      return <VistaDetalleRuta detalles={detalles} onVolver={() => setDetalles(null)} />;
+    }
+
+    const {
+      totalZonaDesabasto = 0,
+      totalZonaAtendidos = 0,
+      porcentajeZona = 0,
+      porcentajeEfectivosZona = 0,
+      colorZona = "bg-red-600",
+      semaforo = "🔴",
+    } = resumenZona;
+
+    return (
+      <div className="min-h-screen bg-gray-100 px-4 py-6 flex justify-center">
+        <div className="bg-white shadow-lg rounded-3xl p-6 w-full max-w-5xl">
+
+          <h2 className="text-xl font-semibold text-gray-800 text-center">
+            {semaforo} Supervisión — {usuario.region}
+          </h2>
+
+          <p className="text-sm text-gray-500 text-center mb-3">
+            {offset === 1
+              ? formatFechaLargoCR(isoNDiasAtras(1))
+              : formatFechaLargoCR(hoyISO())}
+          </p>
+
+          <div className="flex justify-center gap-3 mb-4">
+            <button
+              onClick={() => setVista("menu")}
+              className="text-sm bg-gray-500 text-white py-1 px-4 rounded-lg hover:bg-gray-600"
+            >
+              ⬅ Menú
+            </button>
+
+            <button
+              onClick={() => cargarAgentesDelDia(offset)}
+              className="text-sm bg-blue-600 text-white py-1 px-4 rounded-lg hover:bg-blue-700"
+            >
+              🔄 Actualizar
+            </button>
+          </div>
+
+          <div className="bg-gray-300 rounded-full h-4 overflow-hidden mb-2">
+            <div
+              className={`${colorZona} h-4 transition-all duration-500`}
+              style={{ width: `${porcentajeZona}%` }}
+            />
+          </div>
+
+          <p className="text-sm text-center text-gray-700 mb-4">
+            {totalZonaAtendidos} de {totalZonaDesabasto} PDV atendidos (
+            {porcentajeZona}%) | Efectivos: {porcentajeEfectivosZona}%
+          </p>
+
+          {agentes.length === 0 ? (
+            <div className="bg-white p-6 rounded-xl shadow text-center text-gray-600">
+              No hay agentes registrados en esta región.
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {agentes.map((a) => (
+                <div
+                  key={a.telefono}
+                  className="rounded-xl shadow-md p-4 border border-gray-200 bg-white"
+                >
+                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span>{a.semaforo}</span> {a.nombre}
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-1">
+                    {a.ranking}.º de {a.totalAgentes} — Ruta {a.ruta_norm}
+                  </p>
+
+                  <div className="bg-gray-300 rounded-full h-3 overflow-hidden mb-2">
+                    <div
+                      className={`${a.colorBarra} h-3 transition-all duration-500`}
+                      style={{ width: `${a.porcentajeAvance}%` }}
+                    />
+                  </div>
+
+                  <p className="text-xs text-gray-700 mb-2">
+                    {a.totalAtendidos} de {a.totalDesabasto} PDV atendidos (
+                    {a.porcentajeAvance}%) | Efectivos: {a.porcentajeEfectivos}%
+                  </p>
+
+                  <button
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 px-4 rounded-lg w-full"
+                    onClick={() =>
+                      cargarDetallesRuta(a.ruta_norm, a.telefono, a.nombre)
+                    }
+                  >
+                    🔍 Ver detalles
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
     );
-  }
-  if (
-    vista === "actual" &&
-    !loading &&
-    (agentes.length === 0 ||
-      !resumenZona ||
-      (!resumenZona.totalZonaDesabasto &&
-        !resumenZona.totalZonaAtendidos))
-  ) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-10">
-        <div className="bg-white shadow-lg rounded-3xl p-8 text-center max-w-md w-full">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Supervisión — {usuario.region}
-          </h2>
+  };
 
-          <p className="text-sm text-gray-600 mb-6">
-            Datos no han sido cargados para el día de hoy.
-          </p>
+  // =====================================================================
+  // RENDER PRINCIPAL - AHORA SOLO GESTIONA LAS VISTAS PRINCIPALES
+  // =====================================================================
+  if (vista === "menu") return <VistaMenu />;
+  if (vista === "actual") return <VistaSeguimiento offset={0} />;
+  if (vista === "anterior") return <VistaSeguimiento offset={1} />;
+  if (vista === "historico") return <VistaHistorico />;
 
-          <button
-            onClick={() => setVista("menu")}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-lg font-semibold"
-          >
-            ⬅ Volver al Menú
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------------------------------------------------------------------------
-     LOADING GENERAL
-     --------------------------------------------------------------------------- */
-  if (loading)
-    return (
-      <p className="text-center text-gray-500 mt-6">
-        Cargando información...
-      </p>
-    );
-
-  /* ---------------------------------------------------------------------------
-     VISTA PRINCIPAL: LISTA DE AGENTES (actual / anterior)
-     --------------------------------------------------------------------------- */
+  // Por si acaso
   return (
-    <div className="min-h-screen sm:min-h-[90vh] bg-gray-100 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10 overflow-hidden">
-      <div className="bg-white shadow-lg rounded-3xl p-6 w-full max-w-5xl animate-fadeIn">
-        {/* Encabezado */}
-        <h2 className="text-xl font-semibold text-gray-800 text-center">
-          {semaforo}{" "}
-          {vista === "anterior"
-            ? `Desabasto Último día atención — ${usuario.region?.toUpperCase()}`
-            : `Supervisor — ${usuario.region?.toUpperCase()}`}
-        </h2>
-
-        <p className="text-sm text-gray-500 text-center mb-3">
-          {vista === "anterior"
-            ? `📅 ${formatFechaLargoCR(isoNDiasAtras(1))}`
-            : `📅 ${formatFechaLargoCR(hoyISO())}`}
-        </p>
-
-        {/* Botones menu / actualizar */}
-        <div className="flex justify-center gap-3 mb-4">
-          <button
-            onClick={() => setVista("menu")}
-            className="text-sm bg-gray-500 text-white py-1 px-4 rounded-lg hover:bg-gray-600"
-          >
-            ⬅ Menú
-          </button>
-
-          <button
-            onClick={() => cargarAgentesGenerico(vista === "actual" ? 0 : 1)}
-            className="text-sm bg-blue-600 text-white py-1 px-4 rounded-lg hover:bg-blue-700"
-          >
-            🔄 Actualizar
-          </button>
-        </div>
-
-        {/* Barra de avance Zona */}
-        <div className="bg-gray-300 rounded-full h-4 overflow-hidden mb-2">
-          <div
-            className={`${barClass} h-4 transition-all duration-500`}
-            style={{ width: `${porcentajeZona}%` }}
-          />
-        </div>
-
-        <p className="text-sm text-center mb-4">
-          <span className={`font-semibold ${pctClass}`}>
-            {totalZonaAtendidos} de {totalZonaDesabasto} PDV atendidos (
-            {porcentajeZona}%)
-          </span>{" "}
-          |{" "}
-          <span className={`font-semibold ${effClass}`}>
-            Efectivos: {porcentajeEfectivosZona}%
-          </span>
-        </p>
-
-        {/* Lista de agentes */}
-        {agentes.length === 0 ? (
-          <div className="bg-white p-6 rounded-xl shadow-sm text-center text-gray-600">
-            No hay agentes registrados en esta región.
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {agentes.map((a) => (
-              <div
-                key={a.id}
-                className="rounded-xl shadow-md p-4 border border-gray-200 bg-white"
-              >
-                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span>{a.semaforo}</span> {a.nombre}
-                </h3>
-
-                <p className="text-xs text-gray-500 mb-1">
-                  {a.ranking}.º de {a.totalAgentes} — Ruta {a.ruta_excel}
-                </p>
-
-                {/* Barra avance agente */}
-                <div className="bg-gray-300 rounded-full h-3 overflow-hidden mb-2">
-                  <div
-                    className={`${getBarColor(a.porcentajeAvance)} h-3 transition-all duration-500`}
-                    style={{ width: `${a.porcentajeAvance}%` }}
-                  />
-                </div>
-
-                <p className="text-xs mb-2 text-center">
-                  <span
-                    className={`font-semibold ${getPctTextColor(
-                      a.porcentajeAvance
-                    )}`}
-                  >
-                    {a.totalAtendidos} de {a.totalDesabasto} PDV atendidos (
-                    {a.porcentajeAvance}%)
-                  </span>{" "}
-                  |{" "}
-                  <span
-                    className={`font-semibold ${getEffTextColor(
-                      a.porcentajeEfectivosAgente
-                    )}`}
-                  >
-                    Efectivos: {a.porcentajeEfectivosAgente}%
-                  </span>
-                </p>
-
-                <button
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 px-4 rounded-lg w-full"
-                  onClick={() => cargarDetalles(a)}
-                >
-                  🔍 Ver detalles
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-10">
+      <p className="text-gray-600">Cargando…</p>
     </div>
   );
 }
